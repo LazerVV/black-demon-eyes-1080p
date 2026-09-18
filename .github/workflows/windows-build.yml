@@ -1,0 +1,89 @@
+name: Windows build
+
+concurrency:
+  group: windows-build-release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-windows.txt pyinstaller pyinstaller-hooks-contrib
+
+      - name: Import check
+        run: |
+          python -m py_compile demon_eye.py glsl_smoke.py windows_app.py
+          python -c "import demon_eye, glsl_smoke, windows_app; print('imports ok')"
+
+      - name: Build single EXE
+        run: >
+          pyinstaller --noconfirm --clean --onefile --windowed
+          --name DemonEye
+          --distpath dist/onefile
+          --workpath build/onefile
+          --specpath build/spec-onefile
+          --collect-all mediapipe
+          --collect-all imageio_ffmpeg
+          --collect-all moderngl
+          --collect-all glcontext
+          --collect-all tkinterdnd2
+          windows_app.py
+
+      - name: Build portable folder
+        run: >
+          pyinstaller --noconfirm --clean --onedir --windowed
+          --name DemonEye
+          --distpath dist/portable
+          --workpath build/portable
+          --specpath build/spec-portable
+          --collect-all mediapipe
+          --collect-all imageio_ffmpeg
+          --collect-all moderngl
+          --collect-all glcontext
+          --collect-all tkinterdnd2
+          windows_app.py
+
+      - name: Add portable shortcut helper
+        shell: pwsh
+        run: |
+          @'
+          @echo off
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "$exe=(Resolve-Path '%~dp0DemonEye.exe').Path; $ws=New-Object -ComObject WScript.Shell; $desktop=[Environment]::GetFolderPath('Desktop'); $sendTo=[Environment]::GetFolderPath('SendTo'); foreach($dst in @((Join-Path $desktop 'Demon Eye.lnk'),(Join-Path $sendTo 'Demon Eye.lnk'))){$s=$ws.CreateShortcut($dst); $s.TargetPath=$exe; $s.WorkingDirectory='%~dp0'; $s.Save()}"
+          echo Desktop and Send To shortcuts created.
+          pause
+          '@ | Set-Content -Encoding ASCII "dist/portable/DemonEye/Create Desktop Shortcut.cmd"
+
+      - name: Package portable ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/portable/DemonEye -DestinationPath dist/DemonEye-Portable.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DemonEye-Windows
+          path: |
+            dist/onefile/DemonEye.exe
+            dist/DemonEye-Portable.zip
+
+      - name: Attach Windows builds to release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" "dist/onefile/DemonEye.exe" "dist/DemonEye-Portable.zip" --clobber
