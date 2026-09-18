@@ -1,4 +1,4 @@
-# demon-eye
+# Black Demon Eyes face filter 1080p
 
 A fast 1080p black-eye + living-plasma effect for short creator clips.
 
