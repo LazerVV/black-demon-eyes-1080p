@@ -1,0 +1,6 @@
+mediapipe==0.10.21
+opencv-python==4.11.0.86
+numpy==1.26.4
+tqdm>=4.66,<5
+moderngl==5.12.0
+imageio-ffmpeg>=0.5,<1
